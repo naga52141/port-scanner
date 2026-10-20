@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Port Scanner Dashboard</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #677085;
+    --border: #e1e4ea; --accent: #2457d6; --accent-text: #fff;
+    --crit: #c62828; --crit-bg: #fdecec; --high: #b35c00; --high-bg: #fff3e0;
+    --ok: #1e7d43; --ok-bg: #e8f5ed; --code: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b1f27; --text: #e6e9ef; --muted: #98a1b3;
+      --border: #2c323d; --accent: #5b8cff; --accent-text: #0b0e14;
+      --crit: #ff7b7b; --crit-bg: #3a1d1f; --high: #ffb35c; --high-bg: #3a2a17;
+      --ok: #6fd39a; --ok-bg: #173023; --code: #232833;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 18px 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  main { max-width: 1280px; margin: 0 auto; padding: 20px 16px; display: grid; gap: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .panel h2 { margin: 0 0 12px; font-size: 15px; }
+  form .row { display: flex; flex-wrap: wrap; gap: 12px; }
+  label.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  label.field input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+                      background: var(--bg); color: var(--text); font-size: 14px; }
+  .grow { flex: 1 1 220px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 18px; margin: 14px 0; }
+  .checks label { display: flex; align-items: center; gap: 6px; }
+  .checks .disabled { color: var(--muted); }
+  button { padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border);
+           background: var(--panel); color: var(--text); cursor: pointer; font-size: 14px; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .bar { height: 8px; background: var(--code); border-radius: 4px; overflow: hidden; flex: 1; }
+  .bar div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .status { display: flex; align-items: center; gap: 12px; margin-top: 12px; color: var(--muted); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+  .stat .n { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .l { color: var(--muted); font-size: 12px; }
+  .stat.bad .n { color: var(--crit); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  td.mono, .mono { font-family: Menlo, Consolas, monospace; font-size: 12.5px; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 12px; margin: 1px 2px 1px 0;
+           text-decoration: none; white-space: nowrap; }
+  .badge.CRITICAL { background: var(--crit-bg); color: var(--crit); }
+  .badge.HIGH { background: var(--high-bg); color: var(--high); }
+  .badge.MEDIUM, .badge.LOW, .badge.UNKNOWN { background: var(--code); color: var(--muted); }
+  .badge.open { background: var(--ok-bg); color: var(--ok); }
+  .badge.filtered { background: var(--code); color: var(--muted); }
+  .risk { color: var(--high); font-size: 12.5px; }
+  .empty { color: var(--muted); padding: 12px 0; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .two { grid-template-columns: 1fr; } }
+  pre.log { background: var(--code); border-radius: 6px; padding: 10px; max-height: 220px; overflow: auto;
+            margin: 0; font-size: 12px; white-space: pre-wrap; }
+  ul.clean { list-style: none; padding: 0; margin: 0; }
+  ul.clean li { padding: 4px 0; }
+  .diff-new { color: var(--crit); } .diff-closed { color: var(--ok); } .diff-changed { color: var(--high); }
+  .error { background: var(--crit-bg); color: var(--crit); padding: 10px; border-radius: 6px; margin-top: 12px; }
+  .hidden { display: none; }
+  select { padding: 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); max-width: 100%; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Port Scanner Dashboard</h1>
+  <p>Cyber security mini project &middot; only scan systems you own or are authorized to test</p>
+</header>
+<main>
+  <section class="panel">
+    <form id="scan-form">
+      <div class="row">
+        <label class="field grow">Target (IP, hostname or CIDR)
+          <input name="target" value="127.0.0.1" required></label>
+        <label class="field">TCP ports <input name="ports" value="1-1024" size="12"></label>
+        <label class="field">UDP ports <input name="udp_ports" value="top" size="10"></label>
+        <label class="field">Threads <input name="threads" type="number" value="200" min="1" max="2000" style="width:90px"></label>
+        <label class="field">Timeout (s) <input name="timeout" type="number" value="0.5" step="any" min="0.05" style="width:90px"></label>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" name="banners" checked> Banner grabbing</label>
+        <label><input type="checkbox" name="udp"> UDP scan</label>
+        <label class="{{ '' if syn_ok else 'disabled' }}" title="{{ syn_reason }}">
+          <input type="checkbox" name="syn" {{ '' if syn_ok else 'disabled' }}>
+          SYN scan{{ '' if syn_ok else ' (' + syn_reason + ')' }}</label>
+        <label><input type="checkbox" name="os_detect" checked> OS detection</label>
+        <label><input type="checkbox" name="cve"> CVE lookup (internet)</label>
+      </div>
+      <button class="primary" id="start" type="submit">Start scan</button>
+      <button id="stop" type="button" disabled>Stop</button>
+      <div class="status"><span id="status-text">Ready</span><div class="bar"><div id="bar"></div></div></div>
+      <div id="error" class="error hidden"></div>
+    </form>
+  </section>
+
+  <section class="stats">
+    <div class="stat"><div class="n" id="s-open">0</div><div class="l">Open ports</div></div>
+    <div class="stat"><div class="n" id="s-filtered">0</div><div class="l">UDP open|filtered</div></div>
+    <div class="stat"><div class="n" id="s-risky">0</div><div class="l">Risky services</div></div>
+    <div class="stat"><div class="n" id="s-cves">0</div><div class="l">Known CVEs</div></div>
+    <div class="stat"><div class="n" id="s-crit">0</div><div class="l">Critical CVEs (CVSS 9+)</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Results</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Host</th><th>Port</th><th>State</th><th>Service</th><th>Banner / software</th><th>Risk &amp; CVEs</th></tr></thead>
+        <tbody id="results"><tr><td colspan="6" class="empty">No scan yet.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="two">
+    <section class="panel">
+      <h2>Operating system</h2>
+      <div id="os"><div class="empty">Enable OS detection to fingerprint hosts.</div></div>
+    </section>
+    <section class="panel">
+      <h2>Changes since last scan of this target</h2>
+      <div id="diff"><div class="empty">Shown after a scan if an earlier scan of the same target exists.</div></div>
+    </section>
+  </div>
+
+  <div class="two">
+    <section class="panel">
+      <h2>Scan log</h2>
+      <pre class="log" id="log"></pre>
+    </section>
+    <section class="panel">
+      <h2>Scan history</h2>
+      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <select id="old"></select> &rarr; <select id="new"></select>
+        <button type="button" id="compare">Compare</button>
+      </div>
+      <div id="compare-out"></div>
+      <ul class="clean" id="history"></ul>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+let jobId = null, logFrom = 0, timer = null;
+
+$("scan-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const body = {
+    target: f.get("target"), ports: f.get("ports"), udp_ports: f.get("udp_ports"),
+    threads: Number(f.get("threads")), timeout: Number(f.get("timeout")),
+    banners: f.has("banners"), udp: f.has("udp"), syn: f.has("syn"),
+    os_detect: f.has("os_detect"), cve: f.has("cve"),
+  };
+  showError("");
+  const res = await fetch("/api/scans", {method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const data = await res.json();
+  if (!res.ok) { showError(data.error); return; }
+  jobId = data.id; logFrom = 0;
+  $("log").textContent = "";
+  $("diff").innerHTML = '<div class="empty">Waiting for scan to finish...</div>';
+  setRunning(true);
+  timer = setInterval(poll, 500);
+});
+
+$("stop").addEventListener("click", () => jobId && fetch(`/api/scans/${jobId}/stop`, {method: "POST"}));
+
+function setRunning(on) {
+  $("start").disabled = on; $("stop").disabled = !on;
+  if (on) $("status-text").textContent = "Scanning...";
+}
+function showError(msg) {
+  $("error").textContent = msg || ""; $("error").classList.toggle("hidden", !msg);
+}
+
+async function poll() {
+  const res = await fetch(`/api/scans/${jobId}?log_from=${logFrom}`);
+  const job = await res.json();
+  if (job.log.length) { $("log").textContent += job.log.join("\n") + "\n"; $("log").scrollTop = 1e9; }
+  logFrom = job.log_next;
+  const pct = job.total ? Math.round(100 * job.done / job.total) : 0;
+  $("bar").style.width = pct + "%";
+  if (job.status === "running") $("status-text").textContent = `Scanning... ${job.done}/${job.total} (${pct}%)`;
+  renderResults(job.results);
+  renderOS(job.hosts);
+  if (job.status !== "running") {
+    clearInterval(timer); setRunning(false);
+    if (job.error) { showError(job.error); $("status-text").textContent = "Scan failed"; return; }
+    $("status-text").textContent = `${job.status === "stopped" ? "Stopped" : "Finished"} in ` +
+      `${job.summary.duration_seconds}s - saved as ${job.saved_as}`;
+    $("bar").style.width = "100%";
+    $("diff").innerHTML = job.diff ? renderDiff(job.diff)
+      : '<div class="empty">First scan of this target - nothing to compare yet.</div>';
+    loadHistory();
+  }
+}
+
+function cveBadges(r) {
+  if (!r.cves || !r.cves.length) return "";
+  const list = r.cves.map((c) => `<a class="badge ${esc(c.severity)}" href="${esc(c.url)}" target="_blank"
+      rel="noopener" title="${esc(c.summary)}">${esc(c.id)} &middot; ${esc(c.score)}</a>`).join("");
+  return `<div>${list}${r.cve_total > r.cves.length ? ` <span class="risk">+${r.cve_total - r.cves.length} more</span>` : ""}</div>`;
+}
+
+function renderResults(results) {
+  const open = results.filter((r) => r.state === "open");
+  const cves = results.flatMap((r) => r.cves || []);
+  $("s-open").textContent = open.length;
+  $("s-filtered").textContent = results.length - open.length;
+  $("s-risky").textContent = results.filter((r) => r.risk).length;
+  $("s-cves").textContent = results.reduce((n, r) => n + (r.cve_total || 0), 0);
+  const crit = cves.filter((c) => c.score >= 9).length;
+  $("s-crit").textContent = crit;
+  $("s-crit").parentElement.classList.toggle("bad", crit > 0);
+  if (!results.length) {
+    $("results").innerHTML = '<tr><td colspan="6" class="empty">No open ports found (yet).</td></tr>';
+    return;
+  }
+  const sorted = [...results].sort((a, b) => a.host.localeCompare(b.host, undefined, {numeric: true})
+    || a.protocol.localeCompare(b.protocol) || a.port - b.port);
+  $("results").innerHTML = sorted.map((r) => `<tr>
+    <td class="mono">${esc(r.host)}</td>
+    <td class="mono">${r.port}/${esc(r.protocol)}</td>
+    <td><span class="badge ${r.state === "open" ? "open" : "filtered"}">${esc(r.state)}</span></td>
+    <td>${esc(r.service)}</td>
+    <td class="mono">${esc(r.banner)}${r.software ? `<div class="risk">${esc(r.software.join(", "))}</div>` : ""}</td>
+    <td>${r.risk ? `<div class="risk">&#9888; ${esc(r.risk)}</div>` : ""}${cveBadges(r)}</td>
+  </tr>`).join("");
+}
+
+function renderOS(hosts) {
+  const entries = Object.entries(hosts).filter(([, info]) => info);
+  if (!entries.length) return;
+  $("os").innerHTML = entries.map(([host, info]) => `<div style="margin-bottom:10px">
+    <b class="mono">${esc(host)}</b>: ${esc(info.guess)}
+    <span class="badge filtered">confidence: ${esc(info.confidence)}</span>
+    <ul style="margin:4px 0 0;padding-left:18px;color:var(--muted)">${info.evidence.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>
+  </div>`).join("");
+}
+
+function renderDiff(d) {
+  const line = (cls, sign, r, extra = "") =>
+    `<li class="${cls}">${sign} <span class="mono">${esc(r.host)} ${r.port}/${esc(r.protocol || "tcp")}</span> ${esc(r.service)}${extra}</li>`;
+  const items = [
+    ...d.opened.map((r) => line("diff-new", "NEW", r, r.risk ? ` - ${esc(r.risk)}` : "")),
+    ...d.closed.map((r) => line("diff-closed", "CLOSED", r)),
+    ...d.changed.map((r) => line("diff-changed", "CHANGED", r,
+      `: <span class="mono">${esc(r.old_banner)}</span> &rarr; <span class="mono">${esc(r.banner)}</span>`)),
+  ];
+  return `<div class="empty" style="padding-top:0">${esc(d.old_scan.replace("T", " "))} &rarr; ${esc(d.new_scan.replace("T", " "))}</div>` +
+    (items.length ? `<ul class="clean">${items.join("")}</ul>` : '<div class="empty">No changes.</div>');
+}
+
+async function loadHistory() {
+  const items = await (await fetch("/api/history")).json();
+  $("history").innerHTML = items.length ? items.map((h) => `<li>
+      <a href="/api/history/${encodeURIComponent(h.name)}">&#8595;</a>
+      <span class="mono">${esc(h.started.replace("T", " "))}</span> &middot; ${esc(h.target)} &middot; ${h.open} open</li>`).join("")
+    : '<li class="empty">No saved scans yet.</li>';
+  const opts = items.map((h) => `<option value="${esc(h.name)}">${esc(h.started.replace("T", " "))} - ${esc(h.target)}</option>`).join("");
+  $("old").innerHTML = opts; $("new").innerHTML = opts;
+  if (items.length > 1) $("old").selectedIndex = 1;
+}
+
+$("compare").addEventListener("click", async () => {
+  if (!$("old").value || !$("new").value) return;
+  const res = await fetch(`/api/compare?old=${encodeURIComponent($("old").value)}&new=${encodeURIComponent($("new").value)}`);
+  $("compare-out").innerHTML = res.ok ? renderDiff(await res.json()) + "<hr style='border:0;border-top:1px solid var(--border)'>"
+    : '<div class="error">Could not compare these scans.</div>';
+});
+
+loadHistory();
+</script>
+</body>
+</html>
