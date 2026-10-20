@@ -154,5 +154,6 @@ def compare():
 
 
 if __name__ == "__main__":
-    print("Dashboard running at http://127.0.0.1:5050  (Ctrl+C to stop)")
-    app.run(host="127.0.0.1", port=5050, debug=False, threaded=True)
+    port = int(os.environ.get("PORT", 5050))
+    print(f"Dashboard running at http://127.0.0.1:{port}  (Ctrl+C to stop)")
+    app.run(host="127.0.0.1", port=port, debug=False, threaded=True)

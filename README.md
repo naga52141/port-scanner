@@ -6,6 +6,8 @@ A network port scanner written in Python. It finds open TCP and UDP ports, ident
 
 > **Legal notice:** Only scan systems you own or have written permission to test. Unauthorised port scanning can break the law (for example, the Computer Misuse Act in the UK or the CFAA in the US) and network policies. Safe targets: `127.0.0.1`, your own home lab or VMs, and `scanme.nmap.org`, which the Nmap project provides for testing.
 
+**Contents:** [Features](#features) · [Getting started](#getting-started-step-by-step) · [Using the scanner](#using-the-scanner) · [How the project works](#how-the-project-works) · [Defending against port scans](#defending-against-port-scans) · [Limitations](#limitations)
+
 ## Features
 
 | Feature | What it does |
@@ -21,19 +23,126 @@ A network port scanner written in Python. It finds open TCP and UDP ports, ident
 | Reports | JSON or CSV export |
 | Interfaces | Command line, Tkinter desktop GUI, Flask web dashboard |
 
-## Setup (one time)
+## Getting started (step by step)
+
+New to Python projects? Follow these steps in order. They take about 5 minutes.
+
+### Step 1: Install the tools you need
+
+You need **Python 3.8 or newer** and **Git**. To check whether you already have them, open a terminal:
+
+- **Windows:** press Start, type `cmd` and open **Command Prompt** (or use PowerShell).
+- **macOS:** press Cmd+Space, type `Terminal` and press Enter.
+- **Linux:** open your Terminal app.
+
+Then run:
+
+```bash
+python3 --version    # Windows: python --version
+git --version
+```
+
+If either command says "not found", install it:
+
+| Tool | Windows | macOS | Linux (Ubuntu/Debian) |
+|---|---|---|---|
+| Python | [python.org/downloads](https://www.python.org/downloads/). **Tick "Add python.exe to PATH"** in the installer | [python.org/downloads](https://www.python.org/downloads/) | `sudo apt install python3 python3-venv python3-tk` |
+| Git | [git-scm.com/download/win](https://git-scm.com/download/win) | `xcode-select --install` | `sudo apt install git` |
+
+Close and reopen the terminal after installing, then check the versions again.
+
+### Step 2: Download the project
 
 ```bash
 git clone https://github.com/naga52141/port-scanner.git
 cd port-scanner
-python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt    # scapy (SYN scan) + flask (web dashboard)
 ```
 
-The command-line tool and GUI also run without these packages. Only the SYN scan needs scapy, and only the web dashboard needs Flask.
+No Git? On the GitHub page, click **Code → Download ZIP**, unzip it, then `cd` into the folder in your terminal.
 
-## 1. Command line
+### Step 3: Create a virtual environment and install the packages
+
+A **virtual environment** (`.venv`) is a private folder of Python packages for this project only, so it doesn't interfere with anything else on your computer.
+
+**macOS / Linux:**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+**Windows (Command Prompt):**
+```bat
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+**Windows (PowerShell):**
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+When the environment is active, your prompt starts with `(.venv)`. Activate it again (the second line) **every time you open a new terminal** to work on this project.
+
+### Step 4: Check that it works
+
+```bash
+python port_scanner.py --help
+```
+
+You should see the list of options. If you do, setup is done.
+
+### Step 5: Run your first scan
+
+Scan your own computer. It is always safe and legal:
+
+```bash
+python port_scanner.py 127.0.0.1
+```
+
+You'll get a table of the open ports on your machine. If none show up, give the scanner something to find: open a **second** terminal, go to any folder and run `python3 -m http.server 8000` (Windows: `python -m http.server 8000`). Then scan again in the first terminal:
+
+```bash
+python port_scanner.py 127.0.0.1 -p 8000 --os
+```
+
+Port 8000 now shows as **open**, with the web server's banner. Stop the test server with Ctrl+C when you're done.
+
+Next, try every check at once (CVE lookup needs internet and takes a little longer):
+
+```bash
+python port_scanner.py 127.0.0.1 -p top -A
+```
+
+### Step 6: Try the GUI and the web dashboard
+
+```bash
+python gui.py            # opens a desktop window
+python web_app.py        # then open http://127.0.0.1:5050 in your browser
+```
+
+Press **Ctrl+C** in the terminal to stop the dashboard.
+
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `python3: command not found` (Windows) | On Windows, use `python` instead of `python3`. If that fails too, reinstall Python with **"Add python.exe to PATH"** ticked. |
+| PowerShell: `running scripts is disabled on this system` | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or use Command Prompt instead. |
+| `ModuleNotFoundError: No module named 'flask'` (or `scapy`) | The virtual environment isn't active. Run the activate command from Step 3, then `pip install -r requirements.txt`. |
+| `No module named '_tkinter'` when running `gui.py` | Linux: `sudo apt install python3-tk`. macOS with Homebrew Python: `brew install python-tk`. The python.org installers include it. |
+| `Address already in use` for the web dashboard | Another program is using port 5050. Choose another: `PORT=5051 python web_app.py` (Windows CMD: `set PORT=5051` then `python web_app.py`; PowerShell: `$env:PORT=5051` then `python web_app.py`). |
+| `SYN scan needs root - run with sudo` | The SYN scan needs admin rights: `sudo .venv/bin/python port_scanner.py <target> --syn`. On Windows, also install [Npcap](https://npcap.com) and run the terminal as Administrator. The normal scan works without any of this. |
+| CVE lookup is slow or says `lookup failed` | It needs internet, and NVD limits free requests, so the scanner pauses about 6 seconds between products. Get a free key (see [CVE lookup](#cve-lookup-cvepy)) to speed it up. |
+| Every UDP port shows `open\|filtered` | That's normal for UDP when a firewall drops packets or a service doesn't reply. See [UDP scan](#udp-scan-corepy-scan_udp_port). |
+| Scan finds nothing on another computer | That computer's firewall is probably blocking the probes. Try a longer timeout: `--timeout 2`. |
+
+## Using the scanner
+
+### 1. Command line
 
 ```bash
 source .venv/bin/activate
@@ -66,7 +175,7 @@ sudo .venv/bin/python port_scanner.py 192.168.1.10 --syn # SYN scan (needs root)
 
 Press **Ctrl+C** to stop a scan early. Results found so far are still saved.
 
-## 2. Desktop GUI
+### 2. Desktop GUI
 
 ```bash
 python gui.py
@@ -74,7 +183,7 @@ python gui.py
 
 Fill in the target and ports, tick the checks you want, and press **Start scan**. Rows are coloured by risk: red for a critical CVE (CVSS 9+), orange for a high CVE or risky service, and grey for open|filtered. Click a row to see its details, the OS evidence and CVEs; each CVE is a clickable link to the NVD page. Use **Save report...** to export, and **Compare with earlier scan...** to see the changes.
 
-## 3. Web dashboard
+### 3. Web dashboard
 
 ```bash
 python web_app.py
